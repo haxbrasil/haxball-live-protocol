@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Versioned binary protocol for reconstructing visible live HaxBall room state"
 license = "MIT"
-repository = "https://github.com/haxbrasil/haxball-replay-converter"
+repository = "https://github.com/haxbrasil/haxball-live-protocol"
 authors = ["gabhaxball <gabhaxball@gmail.com>"]
 
 [dependencies]

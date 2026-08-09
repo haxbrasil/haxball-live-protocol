@@ -286,7 +286,111 @@ fn validate_state(state: &DynamicState) -> Result<(), ProtocolError> {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    fn finite_vec2() -> impl Strategy<Value = Vec2> {
+        (-1_000_000.0_f64..1_000_000.0, -1_000_000.0_f64..1_000_000.0)
+            .prop_map(|(x, y)| Vec2 { x, y })
+    }
+
+    fn player_state() -> impl Strategy<Value = PlayerState> {
+        (
+            any::<u32>(),
+            "[ -~]{0,32}",
+            0_i32..=2,
+            any::<bool>(),
+            any::<i32>(),
+            any::<bool>(),
+            prop::option::of(finite_vec2()),
+            prop::option::of(0_u32..MAX_DISCS as u32),
+            prop::option::of("[ -~]{0,8}"),
+            any::<u32>(),
+        )
+            .prop_map(
+                |(
+                    id,
+                    name,
+                    team,
+                    admin,
+                    player_number,
+                    activity,
+                    position,
+                    disc_index,
+                    avatar,
+                    input,
+                )| {
+                    PlayerState {
+                        id,
+                        name,
+                        team,
+                        admin,
+                        player_number,
+                        activity,
+                        position,
+                        disc_index,
+                        avatar,
+                        input,
+                    }
+                },
+            )
+    }
+
+    fn disc_state() -> impl Strategy<Value = DiscState> {
+        (
+            any::<u32>(),
+            prop::option::of(finite_vec2()),
+            prop::option::of(finite_vec2()),
+            prop::option::of(finite_vec2()),
+            -10_000.0_f64..10_000.0,
+            -10_000.0_f64..10_000.0,
+            -10_000.0_f64..10_000.0,
+            -10_000.0_f64..10_000.0,
+            any::<i32>(),
+            any::<i32>(),
+            any::<i32>(),
+        )
+            .prop_map(
+                |(
+                    index,
+                    position,
+                    speed,
+                    gravity,
+                    radius,
+                    bounce,
+                    inverse_mass,
+                    damping,
+                    color,
+                    collision_mask,
+                    collision_group,
+                )| DiscState {
+                    index,
+                    position,
+                    speed,
+                    gravity,
+                    radius,
+                    bounce,
+                    inverse_mass,
+                    damping,
+                    color,
+                    collision_mask,
+                    collision_group,
+                },
+            )
+    }
+
+    fn dynamic_state() -> impl Strategy<Value = DynamicState> {
+        (
+            prop::collection::vec(player_state(), 0..16),
+            prop::collection::vec(disc_state(), 0..32),
+        )
+            .prop_map(|(players, discs)| DynamicState {
+                game: None,
+                players,
+                discs,
+            })
+    }
 
     fn fixture() -> Envelope {
         Envelope {
@@ -363,5 +467,48 @@ mod tests {
             })
             .collect();
         assert_eq!(encode_frame(&value), Err(ProtocolError::TooManyPlayers));
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(256))]
+
+        #[test]
+        fn generated_checkpoints_round_trip(
+            epoch in any::<u64>(),
+            sequence in 1_u64..=u64::MAX,
+            source_tick in any::<u64>(),
+            source_time_micros in any::<u64>(),
+            room_name in "[ -~]{0,64}",
+            state in dynamic_state(),
+            bootstrap in prop::collection::vec(any::<u8>(), 0..512),
+        ) {
+            let value = Envelope {
+                protocol_version: PROTOCOL_VERSION,
+                epoch,
+                sequence,
+                source_tick,
+                source_time_micros,
+                payload: Some(envelope::Payload::Checkpoint(Checkpoint {
+                    room_name,
+                    max_players: MAX_PLAYERS as u32,
+                    stadium_json: "{}".into(),
+                    score_limit: 3,
+                    time_limit_seconds: 180,
+                    teams_locked: false,
+                    red_team_colors: None,
+                    blue_team_colors: None,
+                    dynamic: Some(state),
+                    initial_replay: bootstrap,
+                })),
+            };
+
+            let encoded = encode_frame(&value).unwrap();
+            prop_assert_eq!(decode_frame(&encoded).unwrap(), value);
+        }
+
+        #[test]
+        fn arbitrary_bytes_fail_deterministically(bytes in prop::collection::vec(any::<u8>(), 0..4096)) {
+            prop_assert_eq!(decode_frame(&bytes), decode_frame(&bytes));
+        }
     }
 }
