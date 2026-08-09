@@ -1,0 +1,15 @@
+[package]
+name = "haxball-live-protocol"
+version = "0.1.0"
+edition = "2024"
+description = "Versioned binary protocol for reconstructing visible live HaxBall room state"
+license = "MIT"
+repository = "https://github.com/haxbrasil/haxball-replay-converter"
+authors = ["gabhaxball <gabhaxball@gmail.com>"]
+
+[dependencies]
+prost = "0.14"
+thiserror = "2.0"
+
+[dev-dependencies]
+proptest = "1"
