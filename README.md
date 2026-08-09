@@ -3,8 +3,9 @@
 Versioned protobuf-compatible messages for reconstructing the visible state of
 a live HaxBall room. The crate is provider-neutral and program-neutral.
 
-The source emits a full checkpoint when a consumer attaches or static room
-configuration changes. Between checkpoints it emits bounded dynamic frames
+The source emits a full checkpoint, including a canonical zero-frame HBR2
+bootstrap for arbitrary custom stadiums, when a consumer attaches or static
+room configuration changes. Between checkpoints it emits bounded dynamic frames
 containing game, player, and disc state. Every frame carries an epoch,
 monotonic sequence, source tick, and source timestamp.
 

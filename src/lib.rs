@@ -63,6 +63,9 @@ pub struct Checkpoint {
     pub blue_team_colors: Option<TeamColors>,
     #[prost(message, optional, tag = "9")]
     pub dynamic: Option<DynamicState>,
+    /// Canonical zero-frame HBR2 bootstrap for arbitrary custom stadiums.
+    #[prost(bytes = "vec", tag = "10")]
+    pub initial_replay: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -210,6 +213,8 @@ pub enum ProtocolError {
     TooManyDiscs,
     #[error("checkpoint stadium exceeds the size limit")]
     StadiumTooLarge,
+    #[error("checkpoint bootstrap exceeds the size limit")]
+    BootstrapTooLarge,
     #[error("live frame sequence must be positive")]
     InvalidSequence,
 }
@@ -249,6 +254,9 @@ pub fn validate(envelope: &Envelope) -> Result<(), ProtocolError> {
         envelope::Payload::Checkpoint(checkpoint) => {
             if checkpoint.stadium_json.len() > MAX_STADIUM_JSON_BYTES {
                 return Err(ProtocolError::StadiumTooLarge);
+            }
+            if checkpoint.initial_replay.len() > MAX_STADIUM_JSON_BYTES {
+                return Err(ProtocolError::BootstrapTooLarge);
             }
             validate_state(
                 checkpoint
@@ -312,6 +320,7 @@ mod tests {
                     }],
                     discs: vec![],
                 }),
+                initial_replay: Vec::new(),
             })),
         }
     }
