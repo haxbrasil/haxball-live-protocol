@@ -11,6 +11,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_PLAYERS: usize = 128;
 pub const MAX_DISCS: usize = 4_096;
+pub const MAX_AUDIO_CUES: usize = 64;
 pub const MAX_STADIUM_JSON_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone, PartialEq, Message)]
@@ -25,6 +26,8 @@ pub struct Envelope {
     pub source_tick: u64,
     #[prost(uint64, tag = "5")]
     pub source_time_micros: u64,
+    #[prost(enumeration = "AudioCueKind", repeated, tag = "6")]
+    pub audio_cues: Vec<i32>,
     #[prost(oneof = "envelope::Payload", tags = "10, 11")]
     pub payload: Option<envelope::Payload>,
 }
@@ -193,6 +196,17 @@ pub enum GameStatus {
     Resuming = 3,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
+#[repr(i32)]
+pub enum AudioCueKind {
+    PlayerJoin = 0,
+    PlayerLeave = 1,
+    BallKick = 2,
+    Goal = 3,
+    Chat = 4,
+    Notification = 5,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ProtocolError {
     #[error("live frame exceeds the {MAX_FRAME_BYTES}-byte limit")]
@@ -211,6 +225,10 @@ pub enum ProtocolError {
     TooManyPlayers,
     #[error("live frame contains too many discs")]
     TooManyDiscs,
+    #[error("live frame contains too many audio cues")]
+    TooManyAudioCues,
+    #[error("live frame contains an unknown audio cue")]
+    UnknownAudioCue,
     #[error("checkpoint stadium exceeds the size limit")]
     StadiumTooLarge,
     #[error("checkpoint bootstrap exceeds the size limit")]
@@ -244,6 +262,16 @@ pub fn validate(envelope: &Envelope) -> Result<(), ProtocolError> {
     }
     if envelope.sequence == 0 {
         return Err(ProtocolError::InvalidSequence);
+    }
+    if envelope.audio_cues.len() > MAX_AUDIO_CUES {
+        return Err(ProtocolError::TooManyAudioCues);
+    }
+    if envelope
+        .audio_cues
+        .iter()
+        .any(|cue| AudioCueKind::try_from(*cue).is_err())
+    {
+        return Err(ProtocolError::UnknownAudioCue);
     }
 
     match envelope
@@ -399,6 +427,7 @@ mod tests {
             sequence: 1,
             source_tick: 42,
             source_time_micros: 700_000,
+            audio_cues: vec![AudioCueKind::BallKick as i32],
             payload: Some(envelope::Payload::Checkpoint(Checkpoint {
                 room_name: "BFL".into(),
                 max_players: 16,
@@ -488,6 +517,7 @@ mod tests {
                 sequence,
                 source_tick,
                 source_time_micros,
+                audio_cues: Vec::new(),
                 payload: Some(envelope::Payload::Checkpoint(Checkpoint {
                     room_name,
                     max_players: MAX_PLAYERS as u32,
